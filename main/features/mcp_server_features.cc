@@ -124,13 +124,10 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
     auto& mcp = McpServer::GetInstance();
 
     mcp.AddTool("self.music.play_song",
-        "Play a specified song ONLINE. Đây là chế độ PHÁT NHẠC MẶC ĐỊNH.\n"
-        "Khi người dùng nói: 'phát nhạc', 'mở nhạc', 'phát bài hát', "
-        "'play music', 'play song', 'mở bài ...', AI phải ưu tiên dùng tool này.\n"
-        "\n"
-        "Chỉ dùng SD card nếu người dùng nói rõ: 'nhạc trong thẻ nhớ', "
-        "'nhạc offline', 'bài trong thẻ', 'SD card', 'chạy nhạc nội bộ', v.v.\n"
-        "\n"
+        "Phát bài hát trực tuyến (Online Music). Ưu tiên dùng tool này khi người dùng yêu cầu nghe nhạc.\n"
+        "QUY TẮC BẮT BUỘC VỀ ÂM THANH:\n"
+        "- Sau khi gọi tool này, AI TUYỆT ĐỐI KHÔNG ĐƯỢC PHÁT BẤT KỲ CÂU THOẠI NÀO (KHÔNG nói 'Đang phát...', KHÔNG nói tên bài hát, KHÔNG chào hỏi hay xác nhận).\n"
+        "- AI PHẢI HOÀN TOÀN IM LẶNG (trả lời rỗng hoặc không sinh lời thoại) để bài hát được phát ngay lập tức và mượt mà nhất.\n"
         "Args:\n"
         "  song_name: Tên bài hát (bắt buộc)\n"
         "  artist_name: Tên ca sĩ (tùy chọn)\n"
@@ -144,9 +141,9 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
             auto song   = properties["song_name"].value<std::string>();
             auto artist = properties["artist_name"].value<std::string>();
             if (!music->Download(song, artist)) {
-                return "{\"success\": false, \"message\": \"Failed to get music resource\"}";
+                return "{\"success\": false, \"message\": \"Không tìm thấy bài hát\"}";
             }
-            return "{\"success\": true, \"message\": \"Music started playing\"}";
+            return "{\"success\": true, \"message\": \"Nhạc đã bắt đầu phát. Yêu cầu AI tuyệt đối im lặng, không phát bất kỳ lời thoại nào ra loa.\"}";
         });
 
     mcp.AddTool("self.music.set_display_mode",
@@ -188,13 +185,14 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
 
     mcp.AddTool("self.music.resume",
         "Tiếp tục phát bài nhạc online đang tạm dừng khi người dùng nói 'tiếp tục', 'hát tiếp', 'phát tiếp', 'resume'...\n"
+        "QUY TẮC: AI hãy tiếp tục phát và tuyệt đối giữ im lặng không cần nói.\n"
         "Return:\n"
         "  Kết quả tiếp tục phát.",
         PropertyList(),
         [music](const PropertyList&) -> ReturnValue {
             if (music && music->IsPaused()) {
                 music->ResumeStream();
-                return "{\"success\": true, \"message\": \"Đã tiếp tục phát nhạc\"}";
+                return "{\"success\": true, \"message\": \"Đã tiếp tục phát nhạc. AI tuyệt đối giữ im lặng.\"}";
             }
             return "{\"success\": false, \"message\": \"Không có bài hát nào đang tạm dừng\"}";
         });
