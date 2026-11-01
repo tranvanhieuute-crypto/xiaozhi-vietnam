@@ -209,8 +209,6 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
         "  Kết quả dừng nhạc.",
         PropertyList(),
         [music](const PropertyList&) -> ReturnValue {
-            extern void AppClearSavedTouchMusic();
-            AppClearSavedTouchMusic();
             if (music && music->IsPlaying()) {
                 music->StopStreaming();
                 return "{\"success\": true, \"message\": \"Đã tắt nhạc\"}";
