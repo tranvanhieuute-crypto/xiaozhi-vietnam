@@ -548,10 +548,6 @@ void Application::Start() {
             } else if (strcmp(state->valuestring, "stop") == 0) {
                 Schedule([this]() {
                     if (device_state_ == kDeviceStateSpeaking) {
-                        if (music_ && music_->IsPaused()) {
-                            ESP_LOGI(TAG, "TTS finished -> Auto-resuming paused music from exact position");
-                            music_->ResumeStream();
-                        }
                         if (listening_mode_ == kListeningModeManualStop || IsMediaPlaying()) {
                             SetDeviceState(kDeviceStateIdle);
                         } else {
