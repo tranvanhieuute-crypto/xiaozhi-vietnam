@@ -799,6 +799,10 @@ void Application::SetDeviceState(DeviceState state) {
             display->SetEmotion("neutral");
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(true);
+            if (music_ && music_->IsPaused()) {
+                ESP_LOGI(TAG, "Returning to idle with paused music -> Auto-resuming stream");
+                music_->ResumeStream();
+            }
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -1283,7 +1287,7 @@ bool Application::EnsureIdleForMedia() {
  * StopOtherMedia — centralized media teardown
  * ------------------------------------------------------------------ */
 void Application::StopOtherMedia(MediaComponent except) {
-    if (except != MediaComponent::kMusic && music_ && music_->IsPlaying()) {
+    if (except != MediaComponent::kMusic && music_ && music_->IsPlaying() && !music_->IsPaused()) {
         ESP_LOGI(TAG, "StopOtherMedia: stopping music");
         music_->StopStreaming();
     }
