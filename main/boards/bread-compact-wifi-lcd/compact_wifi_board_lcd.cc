@@ -416,22 +416,29 @@ private:
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
 
-            // 2. Nếu đang mở nhạc: Tạm dừng bài hát để lắng nghe lệnh
+            // 2. Nếu đang mở nhạc: Tạm dừng bài hát để lắng nghe lệnh của người dùng
             if (music && music->IsPlaying() && !music->IsPaused()) {
                 ESP_LOGI(TAG, "Touch detected while playing music -> Pausing & Listening");
                 music->PauseStream();
-                app.StartListening();
+                app.ToggleChatState();
                 return;
             }
 
-            // 3. Nếu bài hát đang bị tạm dừng: Chạm tiếp để hát tiếp (Resume)
+            // 3. Nếu robot đang ở trạng thái Listening hoặc Speaking: Chạm để ngắt/dừng chat
+            if (app.GetDeviceState() == kDeviceStateListening || app.GetDeviceState() == kDeviceStateSpeaking) {
+                ESP_LOGI(TAG, "Touch detected while chat active -> Toggling chat state");
+                app.ToggleChatState();
+                return;
+            }
+
+            // 4. Nếu bài hát đang bị tạm dừng: Chạm tiếp để tiếp tục phát nhạc (Resume)
             if (music && music->IsPaused()) {
                 ESP_LOGI(TAG, "Touch detected while music paused -> Resuming stream");
                 music->ResumeStream();
                 return;
             }
 
-            // 4. Nếu KHÔNG mở nhạc: Hành động xoa đầu -> Đổi biểu cảm cute và khen chủ
+            // 5. Nếu KHÔNG mở nhạc và đang rảnh (Idle): Hành động xoa đầu -> Đổi biểu cảm cute và khen chủ
             static const char* cute_emotions[] = {
                 "loving", "happy", "winking", "laughing", "relaxed", "cool", "kissy"
             };
@@ -447,10 +454,14 @@ private:
         });
 
         touch_button_.OnLongPress([this]() {
-            // Chạm và giữ 1 giây: Mở mic lắng nghe trò chuyện trực tiếp
+            // Chạm và giữ 1 giây: Tạm dừng nhạc nếu đang phát và mở mic trò chuyện
             auto& app = Application::GetInstance();
-            ESP_LOGI(TAG, "Touch long press -> Start listening");
-            app.StartListening();
+            auto music = app.GetMusic();
+            if (music && music->IsPlaying() && !music->IsPaused()) {
+                music->PauseStream();
+            }
+            ESP_LOGI(TAG, "Touch long press -> Toggle chat state (Listening)");
+            app.ToggleChatState();
         });
     }
 
