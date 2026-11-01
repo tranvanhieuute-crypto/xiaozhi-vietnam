@@ -184,7 +184,7 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
         });
 
     mcp.AddTool("self.music.resume",
-        "Tiếp tục phát bài nhạc online đang tạm dừng khi người dùng nói 'tiếp tục', 'hát tiếp', 'phát tiếp', 'resume'...\n"
+        "Tiếp tục phát bài nhạc online khi người dùng nói 'tiếp tục', 'hát tiếp', 'phát tiếp', 'resume'...\n"
         "QUY TẮC: AI hãy tiếp tục phát và tuyệt đối giữ im lặng không cần nói.\n"
         "Return:\n"
         "  Kết quả tiếp tục phát.",
@@ -194,7 +194,13 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
                 music->ResumeStream();
                 return "{\"success\": true, \"message\": \"Đã tiếp tục phát nhạc. AI tuyệt đối giữ im lặng.\"}";
             }
-            return "{\"success\": false, \"message\": \"Không có bài hát nào đang tạm dừng\"}";
+            std::string title = music ? music->GetTitle() : "";
+            std::string artist = music ? music->GetArtist() : "";
+            if (!title.empty()) {
+                music->Download(title, artist);
+                return "{\"success\": true, \"message\": \"Đã tiếp tục phát bài hát. AI tuyệt đối giữ im lặng.\"}";
+            }
+            return "{\"success\": false, \"message\": \"Không có bài hát nào được lưu để tiếp tục\"}";
         });
 
     mcp.AddTool("self.music.stop",
@@ -203,6 +209,8 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
         "  Kết quả dừng nhạc.",
         PropertyList(),
         [music](const PropertyList&) -> ReturnValue {
+            extern void AppClearSavedTouchMusic();
+            AppClearSavedTouchMusic();
             if (music && music->IsPlaying()) {
                 music->StopStreaming();
                 return "{\"success\": true, \"message\": \"Đã tắt nhạc\"}";
