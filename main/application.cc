@@ -547,7 +547,7 @@ void Application::Start() {
             } else if (strcmp(state->valuestring, "stop") == 0) {
                 Schedule([this]() {
                     if (device_state_ == kDeviceStateSpeaking) {
-                        if (listening_mode_ == kListeningModeManualStop) {
+                        if (listening_mode_ == kListeningModeManualStop || IsMediaPlaying()) {
                             SetDeviceState(kDeviceStateIdle);
                         } else {
                             SetDeviceState(kDeviceStateListening);
@@ -1227,8 +1227,8 @@ void Application::StopAllMedia() {
 }
 
 bool Application::IsMediaPlaying() const {
-    if (music_ && music_->IsPlaying()) return true;
-    if (radio_ && radio_->IsPlaying()) return true;
+    if (music_ && (music_->IsPlaying() || music_->GetPlayerState() == AudioPlayerState::Loading)) return true;
+    if (radio_ && (radio_->IsPlaying() || radio_->GetPlayerState() == AudioPlayerState::Loading)) return true;
     if (sd_music_ && sd_music_->GetState() == Esp32SdMusic::PlayerState::Playing) return true;
 #ifdef CONFIG_SD_CARD_ENABLE
     if (sd_video_ && sd_video_->GetState() == VideoPlayerState::Playing) return true;
