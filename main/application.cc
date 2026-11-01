@@ -799,10 +799,6 @@ void Application::SetDeviceState(DeviceState state) {
             display->SetEmotion("neutral");
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(true);
-            if (music_ && music_->IsPaused()) {
-                ESP_LOGI(TAG, "Returning to idle with paused music -> Auto-resuming stream");
-                music_->ResumeStream();
-            }
             break;
         case kDeviceStateConnecting:
             display->SetStatus(Lang::Strings::CONNECTING);
@@ -1342,7 +1338,6 @@ void Application::SetupAudioPlayerCallback(AudioStreamPlayer* player) {
         auto cf = lv_display_get_color_format(disp);
 
         if (new_state == AudioPlayerState::Playing) {
-            EnsureIdleForMedia();
 
             if (cf != LV_COLOR_FORMAT_I1) {
                 Display* lcd  = display;
