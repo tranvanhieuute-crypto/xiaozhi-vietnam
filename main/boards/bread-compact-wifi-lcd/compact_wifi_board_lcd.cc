@@ -12,6 +12,13 @@
 #include "led/single_led.h"
 #include "assets/lang_config.h"
 
+/* Extern Touch Music Helpers */
+extern void AppSaveTouchMusic(const std::string& song, const std::string& artist);
+extern bool AppHasSavedTouchMusic();
+extern void AppClearSavedTouchMusic();
+extern bool AppResumeSavedTouchMusic();
+
+
 #include <wifi_station.h>
 #include <esp_log.h>
 #include <driver/i2c_master.h>
@@ -416,10 +423,14 @@ private:
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
 
-            // 2. Nếu đang phát nhạc: Tạm dừng nhạc và mở mic lắng nghe lệnh
-            if (music && music->IsPlaying() && !music->IsPaused()) {
-                ESP_LOGI(TAG, "Touch detected while playing music -> Pausing music and Listening");
-                music->PauseStream();
+            // 2. Nếu đang mở nhạc: Lưu bài hát, dừng stream sạch sẽ (giải phóng mạng & I2S DMA) và mở mic lắng nghe lệnh
+            if (app.IsMediaPlaying() || (music && music->IsPlaying())) {
+                ESP_LOGI(TAG, "Touch detected while playing music -> Saving song, Stopping stream cleanly & Listening");
+                if (music) {
+                    AppSaveTouchMusic(music->GetTitle(), music->GetArtist());
+                    music->StopStreaming();
+                }
+                app.StopAllMedia();
                 if (app.GetDeviceState() != kDeviceStateIdle) {
                     app.SetDeviceState(kDeviceStateIdle);
                 }
@@ -427,15 +438,15 @@ private:
                 return;
             }
 
-            // 3. Nếu nhạc đang TẠM DỪNG:
-            if (music && music->IsPaused()) {
-                // Nếu đang ở trạng thái Listening hoặc Speaking (người dùng chạm lần 2 để hủy nghe):
+            // 3. Nếu đang có bài nhạc tạm dừng trước đó bởi cú chạm:
+            if (AppHasSavedTouchMusic()) {
+                // Nếu người dùng đang ở trạng thái Listening hoặc Speaking (chạm lần 2 để hủy nghe):
                 if (app.GetDeviceState() == kDeviceStateListening || app.GetDeviceState() == kDeviceStateSpeaking) {
-                    ESP_LOGI(TAG, "Touch detected while chat active with paused music -> Stop chat and Resume music");
+                    ESP_LOGI(TAG, "Touch detected while chat active with saved music -> Cancel chat & Resume music");
                     app.ToggleChatState();
                 }
-                ESP_LOGI(TAG, "Resuming paused music via touch");
-                music->ResumeStream();
+                ESP_LOGI(TAG, "Resuming saved music via touch");
+                AppResumeSavedTouchMusic();
                 return;
             }
 
@@ -462,11 +473,15 @@ private:
         });
 
         touch_button_.OnLongPress([this]() {
-            // Chạm và giữ 1 giây: Tạm dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
+            // Chạm và giữ 1 giây: Dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
-            if (music && music->IsPlaying() && !music->IsPaused()) {
-                music->PauseStream();
+            if (app.IsMediaPlaying() || (music && music->IsPlaying())) {
+                if (music) {
+                    AppSaveTouchMusic(music->GetTitle(), music->GetArtist());
+                    music->StopStreaming();
+                }
+                app.StopAllMedia();
             }
             if (app.GetDeviceState() != kDeviceStateIdle) {
                 app.SetDeviceState(kDeviceStateIdle);
