@@ -416,29 +416,22 @@ private:
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
 
-            // 2. Nếu đang mở nhạc: Tạm dừng bài hát để lắng nghe lệnh của người dùng
-            if (music && music->IsPlaying() && !music->IsPaused()) {
-                ESP_LOGI(TAG, "Touch detected while playing music -> Pausing & Listening");
-                music->PauseStream();
+            // 2. Nếu đang mở nhạc: Dừng nhạc sạch sẽ và mở mic lắng nghe lệnh
+            if (music && music->IsPlaying()) {
+                ESP_LOGI(TAG, "Touch detected while playing music -> Stopping music & Listening");
+                music->StopStreaming();
                 app.ToggleChatState();
                 return;
             }
 
-            // 3. Nếu robot đang ở trạng thái Listening hoặc Speaking: Chạm để ngắt/dừng chat
+            // 3. Nếu robot đang ở trạng thái Listening hoặc Speaking: Chạm để ngắt cuộc trò chuyện
             if (app.GetDeviceState() == kDeviceStateListening || app.GetDeviceState() == kDeviceStateSpeaking) {
                 ESP_LOGI(TAG, "Touch detected while chat active -> Toggling chat state");
                 app.ToggleChatState();
                 return;
             }
 
-            // 4. Nếu bài hát đang bị tạm dừng: Chạm tiếp để tiếp tục phát nhạc (Resume)
-            if (music && music->IsPaused()) {
-                ESP_LOGI(TAG, "Touch detected while music paused -> Resuming stream");
-                music->ResumeStream();
-                return;
-            }
-
-            // 5. Nếu KHÔNG mở nhạc và đang rảnh (Idle): Hành động xoa đầu -> Đổi biểu cảm cute và khen chủ
+            // 4. Nếu KHÔNG mở nhạc và đang rảnh (Idle): Hành động xoa đầu -> Đổi biểu cảm cute và khen chủ
             static const char* cute_emotions[] = {
                 "loving", "happy", "winking", "laughing", "relaxed", "cool", "kissy"
             };
@@ -454,18 +447,16 @@ private:
         });
 
         touch_button_.OnLongPress([this]() {
-            // Chạm và giữ 1 giây: Tạm dừng nhạc nếu đang phát và mở mic trò chuyện
+            // Chạm và giữ 1 giây: Dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
-            if (music && music->IsPlaying() && !music->IsPaused()) {
-                music->PauseStream();
+            if (music && music->IsPlaying()) {
+                music->StopStreaming();
             }
             ESP_LOGI(TAG, "Touch long press -> Toggle chat state (Listening)");
             app.ToggleChatState();
         });
     }
-
-    // IoT initialization, adding support for AI visible devices
     void InitializeTools() {
         static LampController lamp(LAMP_GPIO);
     }
