@@ -157,25 +157,34 @@ void QRCodeDisplay::RenderColor(const uint8_t* qrcode,
     lv_canvas_set_buffer(canvas, buf, canvas_w, canvas_h, LV_COLOR_FORMAT_RGB565);
     lv_obj_set_pos(canvas, 0, 0);
     lv_obj_set_size(canvas, canvas_w, canvas_h);
-    lv_canvas_fill_bg(canvas, lv_color_make(0xFF, 0xFF, 0xFF), LV_OPA_COVER);
+    // Pure black background blends into the dark astronaut visor
+    lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_COVER);
     lv_obj_move_foreground(canvas);
     canvas_obj_ = canvas;
 
-    // Draw QR modules
+    // Draw QR modules (enlarged to fill vertical height cleanly)
     int qr_size    = esp_qrcode_get_size(qrcode);
-    int max_side   = ((canvas_w < canvas_h) ? canvas_w : canvas_h) * 70 / 100;
+    int max_side   = ((canvas_w < canvas_h) ? canvas_w : canvas_h) - 20; // ~220px on 240px screen
     int pixel_size = max_side / qr_size;
     if (pixel_size < 2) pixel_size = 2;
 
-    int qr_pos_x = (canvas_w - qr_size * pixel_size) / 2;
-    int qr_pos_y = (canvas_h - qr_size * pixel_size) / 2;
+    int qr_display_size = qr_size * pixel_size;
+
+    // Shift QR right (+30px) to center visually in circular helmet glass
+    int qr_offset_x = 30;
+    int qr_pos_x = (canvas_w - qr_display_size) / 2 + qr_offset_x;
+    if (qr_pos_x + qr_display_size > canvas_w - 4) {
+        qr_pos_x = canvas_w - qr_display_size - 4;
+    }
+    int qr_pos_y = (canvas_h - qr_display_size) / 2;
 
     lv_layer_t layer;
     lv_canvas_init_layer(canvas, &layer);
 
+    // Modules in pure white
     lv_draw_rect_dsc_t rect_dsc;
     lv_draw_rect_dsc_init(&rect_dsc);
-    rect_dsc.bg_color = lv_color_black();
+    rect_dsc.bg_color = lv_color_white();
     rect_dsc.bg_opa   = LV_OPA_COVER;
 
     for (int y = 0; y < qr_size; y++) {
@@ -192,7 +201,7 @@ void QRCodeDisplay::RenderColor(const uint8_t* qrcode,
         }
     }
 
-    // Draw text below QR code
+    // Draw text below QR code if text is not empty
     if (text && text[0]) {
         lv_draw_label_dsc_t label_dsc;
         lv_draw_label_dsc_init(&label_dsc);
@@ -213,7 +222,7 @@ void QRCodeDisplay::RenderColor(const uint8_t* qrcode,
     lv_canvas_finish_layer(canvas, &layer);
     displayed_ = true;
 
-    ESP_LOGI(TAG, "QR rendered (color, %dx%d, pixel=%d)", qr_size, qr_size, pixel_size);
+    ESP_LOGI(TAG, "QR rendered (color, %dx%d, pixel=%d, pos=(%d,%d))", qr_size, qr_size, pixel_size, qr_pos_x, qr_pos_y);
 }
 
 // ===================================================================
@@ -230,7 +239,7 @@ void QRCodeDisplay::RenderMono(const uint8_t* qrcode,
 
     // Allocate I1 (1-bit) buffer in DMA-capable internal memory.
     // Must use LV_DRAW_BUF_SIZE — it includes the 8-byte I1 palette
-    // (2 entries × sizeof(lv_color32_t)) that LV_CANVAS_BUF_SIZE omits.
+    // (2 entries * sizeof(lv_color32_t)) that LV_CANVAS_BUF_SIZE omits.
     size_t buf_size = LV_DRAW_BUF_SIZE(canvas_w, canvas_h, LV_COLOR_FORMAT_I1);
     auto* buf = static_cast<uint8_t*>(
         heap_caps_malloc(buf_size, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
@@ -287,25 +296,6 @@ void QRCodeDisplay::RenderMono(const uint8_t* qrcode,
             }
         }
     }
-
-#if (0)
-    // Draw text below QR code
-    if (text && text[0]) {
-        lv_draw_label_dsc_t label_dsc;
-        lv_draw_label_dsc_init(&label_dsc);
-        label_dsc.color = lv_color_white();
-        label_dsc.text  = text;
-
-        int text_y = qr_pos_y + qr_display_size + 2;
-        lv_area_t text_area = {
-            .x1 = 0,
-            .y1 = (int32_t)text_y,
-            .x2 = (int32_t)(canvas_w - 1),
-            .y2 = (int32_t)(canvas_h - 1),
-        };
-        lv_draw_label(&layer, &label_dsc, &text_area);
-    }
-#endif
 
     lv_canvas_finish_layer(canvas, &layer);
     lv_obj_remove_flag(canvas, LV_OBJ_FLAG_HIDDEN);
