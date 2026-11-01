@@ -91,10 +91,10 @@ void McpFeatureTools::RegisterIp2QrCodeTool(std::function<void(bool)> overlay_cb
         [](const PropertyList& /*properties*/) -> ReturnValue {
             auto& qr = qrcode::QRCodeDisplay::GetInstance();
             std::string qr_data = "00020101021138630010A000000727013300069704360119SPAY1262974307564790208QRIBFTTA53037045802VN63046E1D";
-            bool ok = qr.Show(qr_data, "TRAN VAN HIEU");
+            bool ok = qr.Show(qr_data, "");
             if (ok) {
                 ESP_LOGI(TAG, "Payment QR code displayed successfully");
-                return "{\"success\": true, \"message\": \"Đã hiển thị mã QR thanh toán của Trần Văn Hiếu lên màn hình\"}";
+                return "{\"success\": true, \"message\": \"Đã hiển thị mã QR thanh toán lên màn hình\"}";
             } else {
                 ESP_LOGE(TAG, "Failed to display payment QR code");
                 return "{\"success\": false, \"message\": \"Không thể hiển thị mã QR thanh toán\"}";
