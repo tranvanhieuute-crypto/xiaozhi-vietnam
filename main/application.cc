@@ -35,43 +35,6 @@
 #include "ml307_board.h"
 #define TAG "Application"
 
-/* ---- Touch Music Resume Helpers ---- */
-static std::string s_saved_touch_song;
-static std::string s_saved_touch_artist;
-static bool s_saved_by_touch = false;
-
-void AppSaveTouchMusic(const std::string& song, const std::string& artist) {
-    s_saved_touch_song = song;
-    s_saved_touch_artist = artist;
-    s_saved_by_touch = true;
-    ESP_LOGI("TouchMusic", "Saved music by touch: song='%s' artist='%s'", song.c_str(), artist.c_str());
-}
-
-bool AppHasSavedTouchMusic() {
-    return s_saved_by_touch && !s_saved_touch_song.empty();
-}
-
-void AppClearSavedTouchMusic() {
-    s_saved_by_touch = false;
-    s_saved_touch_song.clear();
-    s_saved_touch_artist.clear();
-}
-
-bool AppResumeSavedTouchMusic() {
-    if (AppHasSavedTouchMusic()) {
-        auto& app = Application::GetInstance();
-        auto music = app.GetMusic();
-        if (music) {
-            std::string song = s_saved_touch_song;
-            std::string artist = s_saved_touch_artist;
-            AppClearSavedTouchMusic();
-            ESP_LOGI("TouchMusic", "Resuming saved music: song='%s' artist='%s'", song.c_str(), artist.c_str());
-            return music->Download(song, artist);
-        }
-    }
-    return false;
-}
-
 
 
 static const char* const STATE_STRINGS[] = {
@@ -585,9 +548,9 @@ void Application::Start() {
             } else if (strcmp(state->valuestring, "stop") == 0) {
                 Schedule([this]() {
                     if (device_state_ == kDeviceStateSpeaking) {
-                        if (AppHasSavedTouchMusic()) {
-                            ESP_LOGI(TAG, "TTS finished, auto-resuming saved music from touch");
-                            AppResumeSavedTouchMusic();
+                        if (music_ && music_->IsPaused()) {
+                            ESP_LOGI(TAG, "TTS finished -> Auto-resuming paused music from exact position");
+                            music_->ResumeStream();
                         }
                         if (listening_mode_ == kListeningModeManualStop || IsMediaPlaying()) {
                             SetDeviceState(kDeviceStateIdle);
