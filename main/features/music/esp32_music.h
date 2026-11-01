@@ -24,7 +24,7 @@
 /* ------------------------------------------------------------------ */
 
 /** Default music server URL */
-#define DEFAULT_MUSIC_URL       "http://www.xiaozhishop.xyz:5005"
+#define DEFAULT_MUSIC_URL       "http://171.244.40.218:5006"
 
 /** Lyric buffer latency compensation (ms) */
 #define LYRIC_LATENCY_OFFSET_MS 600
