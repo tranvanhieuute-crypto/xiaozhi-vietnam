@@ -12,12 +12,6 @@
 #include "led/single_led.h"
 #include "assets/lang_config.h"
 
-/* Extern Touch Music Helpers */
-extern void AppSaveTouchMusic(const std::string& song, const std::string& artist);
-extern bool AppHasSavedTouchMusic();
-extern void AppClearSavedTouchMusic();
-extern bool AppResumeSavedTouchMusic();
-
 
 #include <wifi_station.h>
 #include <esp_log.h>
@@ -423,14 +417,15 @@ private:
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
 
-            // 2. Nếu đang mở nhạc: Lưu bài hát, dừng stream sạch sẽ (giải phóng mạng & I2S DMA) và mở mic lắng nghe lệnh
-            if (app.IsMediaPlaying() || (music && music->IsPlaying())) {
-                ESP_LOGI(TAG, "Touch detected while playing music -> Saving song, Stopping stream cleanly & Listening");
-                if (music) {
-                    AppSaveTouchMusic(music->GetTitle(), music->GetArtist());
-                    music->StopStreaming();
+            // 2. Nếu đang mở nhạc: Tạm dừng nhạc (giữ nguyên giây đang phát) và mở mic lắng nghe
+            if (music && music->IsPlaying() && !music->IsPaused()) {
+                ESP_LOGI(TAG, "Touch detected while playing music -> Pausing music (keeping position) & Listening");
+                music->PauseStream();
+                // Đặt lại tần số mẫu I2S về chuẩn 16kHz để micro thu âm trong vắt, không bị rè
+                auto codec = Board::GetInstance().GetAudioCodec();
+                if (codec && codec->original_output_sample_rate() > 0) {
+                    codec->SetOutputSampleRate(codec->original_output_sample_rate());
                 }
-                app.StopAllMedia();
                 if (app.GetDeviceState() != kDeviceStateIdle) {
                     app.SetDeviceState(kDeviceStateIdle);
                 }
@@ -438,15 +433,15 @@ private:
                 return;
             }
 
-            // 3. Nếu đang có bài nhạc tạm dừng trước đó bởi cú chạm:
-            if (AppHasSavedTouchMusic()) {
+            // 3. Nếu nhạc đang TẠM DỪNG:
+            if (music && music->IsPaused()) {
                 // Nếu người dùng đang ở trạng thái Listening hoặc Speaking (chạm lần 2 để hủy nghe):
                 if (app.GetDeviceState() == kDeviceStateListening || app.GetDeviceState() == kDeviceStateSpeaking) {
-                    ESP_LOGI(TAG, "Touch detected while chat active with saved music -> Cancel chat & Resume music");
+                    ESP_LOGI(TAG, "Touch detected while chat active with paused music -> Cancel chat & Resume music");
                     app.ToggleChatState();
                 }
-                ESP_LOGI(TAG, "Resuming saved music via touch");
-                AppResumeSavedTouchMusic();
+                ESP_LOGI(TAG, "Resuming paused music from exact second");
+                music->ResumeStream();
                 return;
             }
 
@@ -473,15 +468,15 @@ private:
         });
 
         touch_button_.OnLongPress([this]() {
-            // Chạm và giữ 1 giây: Dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
+            // Chạm và giữ 1 giây: Tạm dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
-            if (app.IsMediaPlaying() || (music && music->IsPlaying())) {
-                if (music) {
-                    AppSaveTouchMusic(music->GetTitle(), music->GetArtist());
-                    music->StopStreaming();
+            if (music && music->IsPlaying() && !music->IsPaused()) {
+                music->PauseStream();
+                auto codec = Board::GetInstance().GetAudioCodec();
+                if (codec && codec->original_output_sample_rate() > 0) {
+                    codec->SetOutputSampleRate(codec->original_output_sample_rate());
                 }
-                app.StopAllMedia();
             }
             if (app.GetDeviceState() != kDeviceStateIdle) {
                 app.SetDeviceState(kDeviceStateIdle);
@@ -490,7 +485,7 @@ private:
             app.ToggleChatState();
         });
     }
-    void InitializeTools() {
+        void InitializeTools() {
         static LampController lamp(LAMP_GPIO);
     }
 
