@@ -547,6 +547,10 @@ void Application::Start() {
             } else if (strcmp(state->valuestring, "stop") == 0) {
                 Schedule([this]() {
                     if (device_state_ == kDeviceStateSpeaking) {
+                        if (music_ && music_->IsPaused()) {
+                            ESP_LOGI(TAG, "TTS finished, auto-resuming paused music");
+                            music_->ResumeStream();
+                        }
                         if (listening_mode_ == kListeningModeManualStop || IsMediaPlaying()) {
                             SetDeviceState(kDeviceStateIdle);
                         } else {
@@ -1338,6 +1342,10 @@ void Application::SetupAudioPlayerCallback(AudioStreamPlayer* player) {
         auto cf = lv_display_get_color_format(disp);
 
         if (new_state == AudioPlayerState::Playing) {
+            // Cut off any TTS talking (e.g. 'Đang phát bài...') immediately so only music is heard
+            if (device_state_ == kDeviceStateSpeaking) {
+                AbortSpeaking(kAbortReasonNone);
+            }
 
             if (cf != LV_COLOR_FORMAT_I1) {
                 Display* lcd  = display;
