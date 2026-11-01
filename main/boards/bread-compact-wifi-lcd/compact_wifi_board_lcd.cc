@@ -416,13 +416,10 @@ private:
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
 
-            // 2. Nếu đang mở nhạc hoặc media: Dừng nhạc sạch sẽ và mở mic lắng nghe lệnh
-            if (app.IsMediaPlaying() || (music && music->IsPlaying())) {
-                ESP_LOGI(TAG, "Touch detected while playing media -> Stopping media and Listening");
-                if (music) {
-                    music->StopStreaming();
-                }
-                app.StopAllMedia();
+            // 2. Nếu đang phát nhạc: Tạm dừng nhạc và mở mic lắng nghe lệnh
+            if (music && music->IsPlaying() && !music->IsPaused()) {
+                ESP_LOGI(TAG, "Touch detected while playing music -> Pausing music and Listening");
+                music->PauseStream();
                 if (app.GetDeviceState() != kDeviceStateIdle) {
                     app.SetDeviceState(kDeviceStateIdle);
                 }
@@ -430,14 +427,26 @@ private:
                 return;
             }
 
-            // 3. Nếu robot đang ở trạng thái Listening hoặc Speaking: Chạm để ngắt cuộc trò chuyện
+            // 3. Nếu nhạc đang TẠM DỪNG:
+            if (music && music->IsPaused()) {
+                // Nếu đang ở trạng thái Listening hoặc Speaking (người dùng chạm lần 2 để hủy nghe):
+                if (app.GetDeviceState() == kDeviceStateListening || app.GetDeviceState() == kDeviceStateSpeaking) {
+                    ESP_LOGI(TAG, "Touch detected while chat active with paused music -> Stop chat and Resume music");
+                    app.ToggleChatState();
+                }
+                ESP_LOGI(TAG, "Resuming paused music via touch");
+                music->ResumeStream();
+                return;
+            }
+
+            // 4. Nếu robot đang ở trạng thái Listening hoặc Speaking (không có nhạc): Chạm để ngắt cuộc trò chuyện
             if (app.GetDeviceState() == kDeviceStateListening || app.GetDeviceState() == kDeviceStateSpeaking) {
                 ESP_LOGI(TAG, "Touch detected while chat active -> Toggling chat state");
                 app.ToggleChatState();
                 return;
             }
 
-            // 4. Nếu KHÔNG mở nhạc và đang rảnh (Idle): Hành động xoa đầu -> Đổi biểu cảm cute và khen chủ
+            // 5. Nếu KHÔNG có nhạc và đang rảnh (Idle): Hành động xoa đầu -> Đổi biểu cảm cute và khen chủ
             static const char* cute_emotions[] = {
                 "loving", "happy", "winking", "laughing", "relaxed", "cool", "kissy"
             };
@@ -453,14 +462,11 @@ private:
         });
 
         touch_button_.OnLongPress([this]() {
-            // Chạm và giữ 1 giây: Dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
+            // Chạm và giữ 1 giây: Tạm dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
-            if (app.IsMediaPlaying() || (music && music->IsPlaying())) {
-                if (music) {
-                    music->StopStreaming();
-                }
-                app.StopAllMedia();
+            if (music && music->IsPlaying() && !music->IsPaused()) {
+                music->PauseStream();
             }
             if (app.GetDeviceState() != kDeviceStateIdle) {
                 app.SetDeviceState(kDeviceStateIdle);
