@@ -416,10 +416,16 @@ private:
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
 
-            // 2. Nếu đang mở nhạc: Dừng nhạc sạch sẽ và mở mic lắng nghe lệnh
-            if (music && music->IsPlaying()) {
-                ESP_LOGI(TAG, "Touch detected while playing music -> Stopping music & Listening");
-                music->StopStreaming();
+            // 2. Nếu đang mở nhạc hoặc media: Dừng nhạc sạch sẽ và mở mic lắng nghe lệnh
+            if (app.IsMediaPlaying() || (music && music->IsPlaying())) {
+                ESP_LOGI(TAG, "Touch detected while playing media -> Stopping media and Listening");
+                if (music) {
+                    music->StopStreaming();
+                }
+                app.StopAllMedia();
+                if (app.GetDeviceState() != kDeviceStateIdle) {
+                    app.SetDeviceState(kDeviceStateIdle);
+                }
                 app.ToggleChatState();
                 return;
             }
@@ -450,8 +456,14 @@ private:
             // Chạm và giữ 1 giây: Dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
-            if (music && music->IsPlaying()) {
-                music->StopStreaming();
+            if (app.IsMediaPlaying() || (music && music->IsPlaying())) {
+                if (music) {
+                    music->StopStreaming();
+                }
+                app.StopAllMedia();
+            }
+            if (app.GetDeviceState() != kDeviceStateIdle) {
+                app.SetDeviceState(kDeviceStateIdle);
             }
             ESP_LOGI(TAG, "Touch long press -> Toggle chat state (Listening)");
             app.ToggleChatState();
