@@ -2,6 +2,7 @@
 #include "codecs/no_audio_codec.h"
 #include "display/lcd_display.h"
 #include "features/music/music_visualizer.h"
+#include "features/QRCode/qrcode_display.h"
 #include "system_reset.h"
 #include "application.h"
 #include "button.h"
@@ -80,6 +81,7 @@ class CompactWifiBoardLCD : public WifiBoard {
 private:
  
     Button boot_button_;
+    Button touch_button_;
     LcdDisplay* display_;
 #ifdef CONFIG_TOUCH_PANEL_ENABLE
     LcdTouch *touch_;
@@ -271,7 +273,7 @@ private:
             return this->WaitForTouchEvent();
         });
 
-        touch_->SetGestureCallback([this](TouchGesture gesture, int16_t x, int16_t y) {
+        touch_->SetGestureCallback([this](<TouchGesture gesture, int16_t x, int16_t y>) {
         ESP_LOGI(TAG, "Touch gesture detected: %d at (%d, %d)", static_cast<int>(gesture), x, y);
         switch (gesture) {
             case TOUCH_GESTURE_SWIPE_RIGHT:
@@ -402,6 +404,54 @@ private:
             }
             app.ToggleChatState();
         });
+
+        touch_button_.OnClick([this]() {
+            // 1. Nếu đang hiển thị mã QR: Chạm đầu để tắt mã QR ngay lập tức
+            if (qrcode::QRCodeDisplay::GetInstance().IsDisplayed()) {
+                ESP_LOGI(TAG, "Touch detected while QR displayed -> Dismissing QR");
+                qrcode::QRCodeDisplay::GetInstance().Clear();
+                return;
+            }
+
+            auto& app = Application::GetInstance();
+            auto music = app.GetMusic();
+
+            // 2. Nếu đang mở nhạc: Tạm dừng bài hát để lắng nghe lệnh
+            if (music && music->IsPlaying() && !music->IsPaused()) {
+                ESP_LOGI(TAG, "Touch detected while playing music -> Pausing & Listening");
+                music->PauseStream();
+                app.StartListening();
+                return;
+            }
+
+            // 3. Nếu bài hát đang bị tạm dừng: Chạm tiếp để hát tiếp (Resume)
+            if (music && music->IsPaused()) {
+                ESP_LOGI(TAG, "Touch detected while music paused -> Resuming stream");
+                music->ResumeStream();
+                return;
+            }
+
+            // 4. Nếu KHÔNG mở nhạc: Hành động xoa đầu -> Đổi biểu cảm cute và khen chủ
+            static const char* cute_emotions[] = {
+                "loving", "happy", "winking", "laughing", "relaxed", "cool", "kissy"
+            };
+            static int emotion_idx = 0;
+            const char* chosen_emotion = cute_emotions[emotion_idx % 7];
+            emotion_idx++;
+
+            ESP_LOGI(TAG, "Petting head -> Setting emotion: %s", chosen_emotion);
+            if (display_) {
+                display_->SetEmotion(chosen_emotion);
+                display_->ShowNotification("Thích được xoa đầu ghê~ ❤️");
+            }
+        });
+
+        touch_button_.OnLongPress([this]() {
+            // Chạm và giữ 1 giây: Mở mic lắng nghe trò chuyện trực tiếp
+            auto& app = Application::GetInstance();
+            ESP_LOGI(TAG, "Touch long press -> Start listening");
+            app.StartListening();
+        });
     }
 
     // IoT initialization, adding support for AI visible devices
@@ -411,7 +461,8 @@ private:
 
 public:
     CompactWifiBoardLCD() :
-        boot_button_(BOOT_BUTTON_GPIO) {
+        boot_button_(BOOT_BUTTON_GPIO),
+        touch_button_(TOUCH_BUTTON_GPIO, true) {
         InitializeSpi();
         InitializeLcdDisplay();
 #ifdef CONFIG_TOUCH_PANEL_ENABLE
