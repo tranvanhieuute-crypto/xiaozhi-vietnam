@@ -407,6 +407,9 @@ private:
         });
 
         touch_button_.OnClick([this]() {
+            // Tắt chuông báo nếu đang có chuông hẹn giờ kêu
+            Application::GetInstance().DismissAlert();
+
             // 1. Nếu đang hiển thị mã QR: Chạm đầu để tắt mã QR ngay lập tức
             if (qrcode::QRCodeDisplay::GetInstance().IsDisplayed()) {
                 ESP_LOGI(TAG, "Touch detected while QR displayed -> Dismissing QR");
@@ -417,35 +420,21 @@ private:
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
 
-            // 2. Nếu đang mở nhạc: Tạm dừng nhạc (giữ nguyên giây đang phát) và mở mic lắng nghe
+            // 2. Nếu đang mở nhạc: Chạm 1 lần để TẠM DỪNG nhạc (giữ nguyên giây đang phát)
             if (music && music->IsPlaying() && !music->IsPaused()) {
-                ESP_LOGI(TAG, "Touch detected while playing music -> Pausing music (keeping position) & Listening");
+                ESP_LOGI(TAG, "Touch tap -> Pausing music");
                 music->PauseStream();
-                // Đặt lại tần số mẫu I2S về chuẩn 16kHz để micro thu âm trong vắt, không bị rè
-                auto codec = Board::GetInstance().GetAudioCodec();
-                if (codec && codec->original_output_sample_rate() > 0) {
-                    codec->SetOutputSampleRate(codec->original_output_sample_rate());
-                }
-                if (app.GetDeviceState() != kDeviceStateIdle) {
-                    app.SetDeviceState(kDeviceStateIdle);
-                }
-                app.ToggleChatState();
                 return;
             }
 
-            // 3. Nếu nhạc đang TẠM DỪNG:
+            // 3. Nếu nhạc đang tạm dừng: Chạm 1 lần để TIẾP TỤC phát nhạc đúng đoạn vừa dừng
             if (music && music->IsPaused()) {
-                // Nếu người dùng đang ở trạng thái Listening hoặc Speaking (chạm lần 2 để hủy nghe):
-                if (app.GetDeviceState() == kDeviceStateListening || app.GetDeviceState() == kDeviceStateSpeaking) {
-                    ESP_LOGI(TAG, "Touch detected while chat active with paused music -> Cancel chat & Resume music");
-                    app.ToggleChatState();
-                }
-                ESP_LOGI(TAG, "Resuming paused music from exact second");
+                ESP_LOGI(TAG, "Touch tap -> Resuming music");
                 music->ResumeStream();
                 return;
             }
 
-            // 4. Nếu robot đang ở trạng thái Listening hoặc Speaking (không có nhạc): Chạm để ngắt cuộc trò chuyện
+            // 4. Nếu robot đang ở trạng thái Listening hoặc Speaking: Chạm để ngắt cuộc trò chuyện
             if (app.GetDeviceState() == kDeviceStateListening || app.GetDeviceState() == kDeviceStateSpeaking) {
                 ESP_LOGI(TAG, "Touch detected while chat active -> Toggling chat state");
                 app.ToggleChatState();
@@ -468,20 +457,30 @@ private:
         });
 
         touch_button_.OnLongPress([this]() {
-            // Chạm và giữ 1 giây: Tạm dừng nhạc nếu đang phát và mở mic trò chuyện trực tiếp
             auto& app = Application::GetInstance();
             auto music = app.GetMusic();
-            if (music && music->IsPlaying() && !music->IsPaused()) {
-                music->PauseStream();
-                auto codec = Board::GetInstance().GetAudioCodec();
-                if (codec && codec->original_output_sample_rate() > 0) {
-                    codec->SetOutputSampleRate(codec->original_output_sample_rate());
+
+            // 1. Nếu đang phát nhạc hoặc nhạc đang tạm dừng: Chạm giữ lâu (> 1s) để THOÁT NHẠC LUÔN
+            if (app.IsMediaPlaying() || (music && (music->IsPlaying() || music->IsPaused()))) {
+                ESP_LOGI(TAG, "Touch long press -> Stop & Exit music completely");
+                if (music) {
+                    music->StopStreaming();
                 }
+                app.StopAllMedia();
+                auto display = Board::GetInstance().GetDisplay();
+                if (display) {
+                    display->SetMediaOverlayActive(false);
+                    display->SetStatus(Lang::Strings::STANDBY);
+                    display->SetEmotion("neutral");
+                }
+                return;
             }
+
+            // 2. Nếu bình thường (không có nhạc): Chạm giữ lâu để mở mic trò chuyện trực tiếp với AI
+            ESP_LOGI(TAG, "Touch long press -> Start voice chat");
             if (app.GetDeviceState() != kDeviceStateIdle) {
                 app.SetDeviceState(kDeviceStateIdle);
             }
-            ESP_LOGI(TAG, "Touch long press -> Toggle chat state (Listening)");
             app.ToggleChatState();
         });
     }
