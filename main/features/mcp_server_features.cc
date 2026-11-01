@@ -1,3 +1,6 @@
+#include <esp_timer.h>
+#include "application.h"
+#include "assets/lang_config.h"
 /**
  * @file mcp_server_features.cc
  * @brief MCP tool registrations for media features (music, radio, SD, video).
@@ -24,6 +27,26 @@
 #include <cstring>
 
 #define TAG "McpFeatures"
+
+/* ------------------------------------------------------------------ */
+/*  Timer / Alarm Feature                                             */
+/* ------------------------------------------------------------------ */
+static esp_timer_handle_t s_user_timer_handle = nullptr;
+static std::string s_user_timer_label = "Hết giờ!";
+
+static void TimerCallback(void* arg) {
+    ESP_LOGI(TAG, "Timer expired: %s", s_user_timer_label.c_str());
+    Application::GetInstance().Schedule([]() {
+        auto display = Board::GetInstance().GetDisplay();
+        if (display) {
+            display->SetStatus("⏰ HẾT GIỜ!");
+            display->SetEmotion("surprised");
+            display->ShowNotification(("⏰ " + s_user_timer_label).c_str());
+        }
+        Application::GetInstance().Alert("⏰ Hết giờ!", s_user_timer_label.c_str(), "surprised", Lang::Sounds::OGG_VIBRATION);
+    });
+}
+
 
 /* ================================================================== */
 /*  Network / QR code tool                                             */
@@ -112,6 +135,119 @@ void McpFeatureTools::RegisterIp2QrCodeTool(std::function<void(bool)> overlay_cb
             qr.Clear();
             return "{\"success\": true, \"message\": \"Đã tắt mã QR thành công\"}";
         });
+
+    mcp.AddTool("self.timer.set_timer",
+        "Đặt hẹn giờ, đếm ngược hoặc đặt chuông nhắc việc (Timer / Reminder / Alarm).\n"
+        "Sử dụng công cụ này khi người dùng nói:\n"
+        "- Hẹn giờ đếm ngược: 'hẹn giờ 5 phút', 'đếm ngược 30 giây', 'nhắc tôi sau 15 phút'...\n"
+        "- Hẹn giờ theo mốc thời gian cụ thể: '5h chiều nay nhắc tôi làm việc', '17h nhắc tôi uống thuốc', '7 giờ tối báo thức'...\n"
+        "Args:\n"
+        "  seconds: Số giây đếm ngược từ thời điểm hiện tại đến lúc cần báo. Nếu người dùng hẹn theo mốc giờ cụ thể (ví dụ: '5h chiều', '17:00'), AI hãy lấy mốc giờ đó trừ đi giờ hiện tại để tính ra số giây (seconds = (giờ_hẹn - giờ_hiện_tại) * 3600...) và truyền vào đây.\n"
+        "  target_time: Mốc giờ hẹn dạng 'HH:MM' (24h, ví dụ: '17:00' cho 5h chiều, '07:30' cho 7h30 sáng). Tùy chọn.\n"
+        "  label: Nội dung công việc cần nhắc (ví dụ: 'Làm việc', 'Uống thuốc', 'Nấu mì'). Mặc định 'Hẹn giờ'.\n"
+        "Return:\n"
+        "  Thông báo kết quả đặt hẹn giờ.",
+        PropertyList({
+            Property("seconds", kPropertyTypeInteger, 0, 0, 864000),
+            Property("target_time", kPropertyTypeString, ""),
+            Property("label", kPropertyTypeString, "Hẹn giờ")
+        }),
+        [](const PropertyList& properties) -> ReturnValue {
+            int seconds = 0;
+            if (properties.find("seconds") != properties.end()) {
+                seconds = properties["seconds"].value<int>();
+            }
+            std::string target_time = "";
+            if (properties.find("target_time") != properties.end()) {
+                target_time = properties["target_time"].value<std::string>();
+            }
+            s_user_timer_label = "Hết giờ!";
+            if (properties.find("label") != properties.end()) {
+                s_user_timer_label = properties["label"].value<std::string>();
+            }
+            if (s_user_timer_label.empty()) s_user_timer_label = "Hết giờ!";
+
+            // If seconds was not provided or 0, attempt to calculate from target_time
+            if (seconds <= 0 && !target_time.empty()) {
+                int th = -1, tm_val = -1;
+                if (sscanf(target_time.c_str(), "%d:%d", &th, &tm_val) >= 2) {
+                    setenv("TZ", "ICT-7", 1);
+                    tzset();
+                    time_t now = time(nullptr);
+                    struct tm now_tm;
+                    localtime_r(&now, &now_tm);
+                    if (now > 1700000000ULL) {
+                        int cur_secs = now_tm.tm_hour * 3600 + now_tm.tm_min * 60 + now_tm.tm_sec;
+                        int tgt_secs = th * 3600 + tm_val * 60;
+                        int diff = tgt_secs - cur_secs;
+                        if (diff <= 0) diff += 86400; // Next day
+                        seconds = diff;
+                        ESP_LOGI(TAG, "Calculated timer from target_time '%s': %d seconds", target_time.c_str(), seconds);
+                    }
+                }
+            }
+
+            if (seconds <= 0) {
+                return "{\"success\": false, \"message\": \"Không xác định được thời gian hẹn giờ. Vui lòng cho biết số phút hoặc số giờ.\"}";
+            }
+
+            if (s_user_timer_handle) {
+                esp_timer_stop(s_user_timer_handle);
+                esp_timer_delete(s_user_timer_handle);
+                s_user_timer_handle = nullptr;
+            }
+
+            esp_timer_create_args_t timer_args = {
+                .callback = &TimerCallback,
+                .arg = nullptr,
+                .dispatch_method = ESP_TIMER_TASK,
+                .name = "user_timer",
+                .skip_unhandled_events = true
+            };
+            esp_timer_create(&timer_args, &s_user_timer_handle);
+            esp_timer_start_once(s_user_timer_handle, (uint64_t)seconds * 1000000ULL);
+
+            char buf[128];
+            int hours = seconds / 3600;
+            int mins = (seconds % 3600) / 60;
+            int secs = seconds % 60;
+            if (hours > 0 && mins > 0) {
+                snprintf(buf, sizeof(buf), "Đã đặt hẹn giờ sau %d giờ %d phút để nhắc '%s'", hours, mins, s_user_timer_label.c_str());
+            } else if (hours > 0) {
+                snprintf(buf, sizeof(buf), "Đã đặt hẹn giờ sau %d giờ để nhắc '%s'", hours, s_user_timer_label.c_str());
+            } else if (mins > 0 && secs > 0) {
+                snprintf(buf, sizeof(buf), "Đã đặt hẹn giờ %d phút %d giây cho '%s'", mins, secs, s_user_timer_label.c_str());
+            } else if (mins > 0) {
+                snprintf(buf, sizeof(buf), "Đã đặt hẹn giờ %d phút cho '%s'", mins, s_user_timer_label.c_str());
+            } else {
+                snprintf(buf, sizeof(buf), "Đã đặt hẹn giờ %d giây cho '%s'", secs, s_user_timer_label.c_str());
+            }
+
+            cJSON* ret = cJSON_CreateObject();
+            cJSON_AddBoolToObject(ret, "success", true);
+            cJSON_AddStringToObject(ret, "message", buf);
+            char* str = cJSON_PrintUnformatted(ret);
+            std::string result(str);
+            cJSON_free(str);
+            cJSON_Delete(ret);
+            return result;
+        });
+
+    mcp.AddTool("self.timer.cancel_timer",
+        "Hủy hẹn giờ đang chạy khi người dùng nói 'hủy hẹn giờ', 'tắt hẹn giờ', 'dừng đếm ngược', 'xóa hẹn giờ'...\n"
+        "Return:\n"
+        "  Kết quả hủy hẹn giờ.",
+        PropertyList(),
+        [](const PropertyList&) -> ReturnValue {
+            if (s_user_timer_handle) {
+                esp_timer_stop(s_user_timer_handle);
+                esp_timer_delete(s_user_timer_handle);
+                s_user_timer_handle = nullptr;
+                return "{\"success\": true, \"message\": \"Đã hủy hẹn giờ thành công\"}";
+            }
+            return "{\"success\": false, \"message\": \"Hiện không có hẹn giờ nào đang chạy\"}";
+        });
+
 }
 
 /* ------------------------------------------------------------------ */
