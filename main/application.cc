@@ -332,12 +332,12 @@ void Application::StartListening() {
                 }
             }
 
-            SetListeningMode(kListeningModeManualStop);
+            SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
         });
     } else if (device_state_ == kDeviceStateSpeaking) {
         Schedule([this]() {
             AbortSpeaking(kAbortReasonNone);
-            SetListeningMode(kListeningModeManualStop);
+            SetListeningMode(aec_mode_ == kAecOff ? kListeningModeAutoStop : kListeningModeRealtime);
         });
     }
 }
@@ -1429,7 +1429,8 @@ void Application::SetupAudioPlayerCallback(AudioStreamPlayer* player) {
             }
         } else if (old_state == AudioPlayerState::Playing &&
                    (new_state == AudioPlayerState::Idle ||
-                    new_state == AudioPlayerState::Stopping)) {
+                    new_state == AudioPlayerState::Stopping ||
+                    new_state == AudioPlayerState::Paused)) {
             if (music_visualizer_) {
                 music_visualizer_->Stop();
             }
