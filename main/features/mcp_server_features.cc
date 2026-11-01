@@ -154,17 +154,19 @@ void McpFeatureTools::RegisterIp2QrCodeTool(std::function<void(bool)> overlay_cb
         }),
         [](const PropertyList& properties) -> ReturnValue {
             int seconds = 0;
-            if (properties.find("seconds") != properties.end()) {
+            try {
                 seconds = properties["seconds"].value<int>();
-            }
+            } catch (...) {}
+
             std::string target_time = "";
-            if (properties.find("target_time") != properties.end()) {
+            try {
                 target_time = properties["target_time"].value<std::string>();
-            }
+            } catch (...) {}
+
             s_user_timer_label = "Hết giờ!";
-            if (properties.find("label") != properties.end()) {
+            try {
                 s_user_timer_label = properties["label"].value<std::string>();
-            }
+            } catch (...) {}
             if (s_user_timer_label.empty()) s_user_timer_label = "Hết giờ!";
 
             // If seconds was not provided or 0, attempt to calculate from target_time
