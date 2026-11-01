@@ -80,6 +80,38 @@ void McpFeatureTools::RegisterIp2QrCodeTool(std::function<void(bool)> overlay_cb
             }
             return json;
         });
+
+    mcp.AddTool("self.qrcode.payment",
+        "Hiển thị mã QR thanh toán nhận tiền (VietQR / ShopeePay) lên màn hình.\n"
+        "Sử dụng công cụ này khi người dùng nói: 'hiện mã QR', 'mở mã QR', 'mã QR', 'mã thanh toán', 'mã nhận tiền', "
+        "'chuyển tiền', 'cho tôi xin mã QR', 'thanh toán', 'quét mã QR', 'hiện mã chuyển khoản', v.v.\n"
+        "Return:\n"
+        "  Thông báo kết quả hiển thị mã QR.",
+        PropertyList(),
+        [](const PropertyList& /*properties*/) -> ReturnValue {
+            auto& qr = qrcode::QRCodeDisplay::GetInstance();
+            std::string qr_data = "00020101021138630010A000000727013300069704360119SPAY1262974307564790208QRIBFTTA53037045802VN63046E1D";
+            bool ok = qr.Show(qr_data, "TRAN VAN HIEU");
+            if (ok) {
+                ESP_LOGI(TAG, "Payment QR code displayed successfully");
+                return "{\"success\": true, \"message\": \"Đã hiển thị mã QR thanh toán của Trần Văn Hiếu lên màn hình\"}";
+            } else {
+                ESP_LOGE(TAG, "Failed to display payment QR code");
+                return "{\"success\": false, \"message\": \"Không thể hiển thị mã QR thanh toán\"}";
+            }
+        });
+
+    mcp.AddTool("self.qrcode.hide",
+        "Tắt hoặc ẩn mã QR đang hiển thị trên màn hình để quay lại giao diện robot bình thường.\n"
+        "Sử dụng công cụ này khi người dùng nói: 'tắt mã QR', 'đóng mã QR', 'ẩn QR', 'quay lại màn hình', 'xong rồi', v.v.\n"
+        "Return:\n"
+        "  Thông báo kết quả tắt mã QR.",
+        PropertyList(),
+        [](const PropertyList& /*properties*/) -> ReturnValue {
+            auto& qr = qrcode::QRCodeDisplay::GetInstance();
+            qr.Clear();
+            return "{\"success\": true, \"message\": \"Đã tắt mã QR thành công\"}";
+        });
 }
 
 /* ------------------------------------------------------------------ */
@@ -108,7 +140,7 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
             Property("song_name", kPropertyTypeString),
             Property("artist_name", kPropertyTypeString, "")
         }),
-        [music](const PropertyList& properties) -> ReturnValue {
+        [music](<const PropertyList& properties>) -> ReturnValue {
             auto song   = properties["song_name"].value<std::string>();
             auto artist = properties["artist_name"].value<std::string>();
             if (!music->Download(song, artist)) {
@@ -126,7 +158,7 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
         PropertyList({
             Property("mode", kPropertyTypeString)
         }),
-        [music](const PropertyList& properties) -> ReturnValue {
+        [music](<const PropertyList& properties>) -> ReturnValue {
             auto mode_str = properties["mode"].value<std::string>();
             std::transform(mode_str.begin(), mode_str.end(), mode_str.begin(), ::tolower);
 
@@ -139,6 +171,45 @@ void McpFeatureTools::RegisterMusicTools(Esp32Music* music) {
                 return "{\"success\": true, \"message\": \"Switched to lyrics display mode\"}";
             }
             return "{\"success\": false, \"message\": \"Invalid display mode, use 'spectrum' or 'lyrics'\"}";
+        });
+
+    mcp.AddTool("self.music.pause",
+        "Tạm dừng phát nhạc online khi người dùng nói 'tạm dừng', 'pause', 'dừng chút'...\n"
+        "Return:\n"
+        "  Kết quả tạm dừng.",
+        PropertyList(),
+        [music](<const PropertyList&>) -> ReturnValue {
+            if (music && music->IsPlaying() && !music->IsPaused()) {
+                music->PauseStream();
+                return "{\"success\": true, \"message\": \"Đã tạm dừng phát nhạc\"}";
+            }
+            return "{\"success\": false, \"message\": \"Không có bài hát nào đang phát để tạm dừng\"}";
+        });
+
+    mcp.AddTool("self.music.resume",
+        "Tiếp tục phát bài nhạc online đang tạm dừng khi người dùng nói 'tiếp tục', 'hát tiếp', 'phát tiếp', 'resume'...\n"
+        "Return:\n"
+        "  Kết quả tiếp tục phát.",
+        PropertyList(),
+        [music](<const PropertyList&>) -> ReturnValue {
+            if (music && music->IsPaused()) {
+                music->ResumeStream();
+                return "{\"success\": true, \"message\": \"Đã tiếp tục phát nhạc\"}";
+            }
+            return "{\"success\": false, \"message\": \"Không có bài hát nào đang tạm dừng\"}";
+        });
+
+    mcp.AddTool("self.music.stop",
+        "Dừng hẳn và tắt bài nhạc online khi người dùng nói 'dừng nhạc', 'tắt nhạc', 'stop', 'thoát nhạc'...\n"
+        "Return:\n"
+        "  Kết quả dừng nhạc.",
+        PropertyList(),
+        [music](<const PropertyList&>) -> ReturnValue {
+            if (music && music->IsPlaying()) {
+                music->StopStreaming();
+                return "{\"success\": true, \"message\": \"Đã tắt nhạc\"}";
+            }
+            return "{\"success\": false, \"message\": \"Không có bài hát nào đang phát\"}";
         });
 }
 
@@ -161,7 +232,7 @@ void McpFeatureTools::RegisterRadioTools(Esp32Radio* radio) {
         PropertyList({
             Property("station_name", kPropertyTypeString)
         }),
-        [radio](const PropertyList& properties) -> ReturnValue {
+        [radio](<const PropertyList& properties>) -> ReturnValue {
             auto name = properties["station_name"].value<std::string>();
             if (!radio->PlayStation(name)) {
                 return "{\"success\": false, \"message\": \"Failed to find or play radio station: " + name + "\"}";
@@ -174,7 +245,7 @@ void McpFeatureTools::RegisterRadioTools(Esp32Radio* radio) {
         "Return:\n"
         "  JSON array of available radio stations.",
         PropertyList(),
-        [radio](const PropertyList& /*properties*/) -> ReturnValue {
+        [radio](<const PropertyList& /*properties*/>) -> ReturnValue {
             auto stations = radio->GetStationList();
             std::string result = "{\"success\": true, \"stations\": [";
             for (size_t i = 0; i < stations.size(); ++i) {
@@ -216,7 +287,7 @@ void McpFeatureTools::RegisterSdVideoTools(VideoPlayer* video) {
         PropertyList({
             Property("action", kPropertyTypeString),
         }),
-        [video](const PropertyList& props) -> ReturnValue {
+        [video](<const PropertyList& props>) -> ReturnValue {
             std::string action = props["action"].value<std::string>();
             video->SetEndCallback(nullptr); // Clear any existing callback
             if (video->GetPlaylist().empty()) {
@@ -245,7 +316,7 @@ void McpFeatureTools::RegisterSdVideoTools(VideoPlayer* video) {
                 video->Play(playlist[random_idx].path);
                 return "{\"success\": true, \"message\": \"Shuffle: playing random video\"}";
             } else if (action == "repeat") {
-                video->SetEndCallback([video](const std::string& /*finished_path*/) -> bool {
+                video->SetEndCallback([video](<const std::string& /*finished_path*/>) -> bool {
                     return video->Next();
                 });
                 video->Next();
@@ -263,7 +334,7 @@ void McpFeatureTools::RegisterSdVideoTools(VideoPlayer* video) {
         PropertyList({
             Property("video_name", kPropertyTypeString)
         }),
-        [video](const PropertyList& properties) -> ReturnValue {
+        [video](<const PropertyList& properties>) -> ReturnValue {
             auto video_name = properties["video_name"].value<std::string>();
             video->SetEndCallback(nullptr); // Clear any existing callback
             if (video->GetPlaylist().empty()) {
@@ -305,7 +376,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
         PropertyList({
             Property("action", kPropertyTypeString),
         }),
-        [sd_music](const PropertyList& props) -> ReturnValue {
+        [sd_music](<const PropertyList& props>) -> ReturnValue {
             std::string action = props["action"].value<std::string>();
 
             if (action == "play") {
@@ -337,7 +408,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
             Property("enabled", kPropertyTypeBoolean),
             Property("mode",    kPropertyTypeString)
         }),
-        [sd_music](const PropertyList& props) -> ReturnValue {
+        [sd_music](<const PropertyList& props>) -> ReturnValue {
             std::string action = props["action"].value<std::string>();
 
             if (action == "shuffle") {
@@ -374,7 +445,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
             Property("action", kPropertyTypeString),
             Property("index",  kPropertyTypeInteger, 0, 0, 9999)
         }),
-        [sd_music](const PropertyList& props) -> ReturnValue {
+        [sd_music](<const PropertyList& props>) -> ReturnValue {
             std::string action = props["action"].value<std::string>();
 
             auto ensure_playlist = [sd_music]() {
@@ -429,7 +500,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
             Property("action",    kPropertyTypeString),
             Property("directory", kPropertyTypeString)
         }),
-        [sd_music](const PropertyList& props) -> ReturnValue {
+        [sd_music](<const PropertyList& props>) -> ReturnValue {
             std::string action = props["action"].value<std::string>();
 
             if (action == "play") {
@@ -460,7 +531,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
             Property("action",  kPropertyTypeString),
             Property("keyword", kPropertyTypeString)
         }),
-        [sd_music](const PropertyList& props) -> ReturnValue {
+        [sd_music](<const PropertyList& props>) -> ReturnValue {
             std::string action  = props["action"].value<std::string>();
             std::string keyword = props["keyword"].value<std::string>();
 
@@ -515,7 +586,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
             Property("page",      kPropertyTypeInteger, 1, 1, 10000),
             Property("page_size", kPropertyTypeInteger, 10, 1, 1000)
         }),
-        [sd_music](const PropertyList& props) -> ReturnValue {
+        [sd_music](<const PropertyList& props>) -> ReturnValue {
             std::string action = props["action"].value<std::string>();
 
             auto ensure_playlist = [sd_music]() {
@@ -576,7 +647,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
         "Quét lại toàn bộ thư viện nhạc trong thẻ SD và cập nhật playlist.json.\n"
         "Return: JSON báo thành công / thất bại.",
         PropertyList(),
-        [sd_music](const PropertyList&) -> ReturnValue {
+        [sd_music](<const PropertyList&>) -> ReturnValue {
             if (sd_music->RebuildPlaylist()) {
                 return "{\"success\": false, \"message\": \"Failed to rescan SD card\"}";
             }
@@ -594,7 +665,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
             Property("keyword",     kPropertyTypeString),
             Property("max_results", kPropertyTypeInteger, 5, 1, 50)
         }),
-        [sd_music](const PropertyList& props) -> ReturnValue {
+        [sd_music](<const PropertyList& props>) -> ReturnValue {
             cJSON* arr = cJSON_CreateArray();
             std::string action = props["action"].value<std::string>();
 
@@ -607,7 +678,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
             int max_results     = props["max_results"].value<int>();
             if (max_results <= 0) max_results = 5;
 
-            auto add_track = [arr](const Esp32SdMusic::TrackInfo& t) {
+            auto add_track = [arr](<const Esp32SdMusic::TrackInfo& t>) {
                 cJSON* o = cJSON_CreateObject();
                 cJSON_AddStringToObject(o, "name",    t.name.c_str());
                 cJSON_AddStringToObject(o, "path",    t.path.c_str());
@@ -637,7 +708,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
     mcp.AddTool("self.sdmusic.progress",
         "Get current playback progress and duration.",
         PropertyList(),
-        [sd_music](const PropertyList&) -> ReturnValue {
+        [sd_music](<const PropertyList&>) -> ReturnValue {
             cJSON* o = cJSON_CreateObject();
             auto prog  = sd_music->GetProgress();
             auto state = sd_music->GetState();
@@ -672,7 +743,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
             Property("genre",  kPropertyTypeString),
             Property("index",  kPropertyTypeInteger, 0, 0, 9999)
         }),
-        [sd_music](const PropertyList& props) -> ReturnValue {
+        [sd_music](<const PropertyList& props>) -> ReturnValue {
             std::string action = props["action"].value<std::string>();
             std::string genre  = props["genre"].value<std::string>();
 
@@ -734,7 +805,7 @@ void McpFeatureTools::RegisterSdMusicTools(Esp32SdMusic* sd_music) {
     mcp.AddTool("self.sdmusic.genre_list",
         "List all unique genres available in the current SD music library.",
         PropertyList(),
-        [sd_music](const PropertyList&) -> ReturnValue {
+        [sd_music](<const PropertyList&>) -> ReturnValue {
             cJSON* arr = cJSON_CreateArray();
             if (sd_music->GetTotalTracks() == 0) sd_music->LoadPlaylist();
             for (auto& g : sd_music->GetGenres()) {
